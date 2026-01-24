@@ -4,7 +4,7 @@
 //! including database management, file indexing, and search capabilities.
 
 pub mod service;
-// pub mod db;      // Coming in Plan 01-02
+pub mod db;
 // pub mod indexer; // Coming in Plan 01-03
 
 use thiserror::Error;
