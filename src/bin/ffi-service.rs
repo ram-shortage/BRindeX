@@ -67,6 +67,12 @@ fn init_logging() {
         .init();
 
     tracing::info!("Logging initialized to {:?}", log_dir);
+
+    // Log version info on startup
+    tracing::info!(
+        "FastFileIndex Service v{} starting",
+        env!("CARGO_PKG_VERSION")
+    );
 }
 
 #[cfg(windows)]

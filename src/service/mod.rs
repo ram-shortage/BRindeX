@@ -4,6 +4,7 @@
 //! - Service registration and control
 //! - State transitions (Starting -> Running -> Stopping -> Stopped)
 //! - Configuration loading
+//! - Database initialization and indexer management
 
 pub mod config;
 pub mod control;
@@ -43,15 +44,19 @@ pub const SERVICE_DISPLAY_NAME: &str = "FastFileIndex Service";
 /// 1. Create shutdown channel
 /// 2. Register control handler with SCM
 /// 3. Report StartPending state
-/// 4. Initialize service resources
-/// 5. Report Running state
-/// 6. Wait for shutdown signal
-/// 7. Report StopPending state
-/// 8. Clean up resources
-/// 9. Report Stopped state
+/// 4. Initialize database
+/// 5. Start background indexer
+/// 6. Report Running state
+/// 7. Wait for shutdown signal
+/// 8. Report StopPending state
+/// 9. Stop indexer gracefully
+/// 10. Report Stopped state
 #[cfg(windows)]
 pub fn run_service(_arguments: Vec<OsString>) -> Result<()> {
-    // Create shutdown channel
+    use crate::db;
+    use crate::indexer;
+
+    // Create shutdown channel for service control
     let (shutdown_tx, shutdown_rx) = mpsc::channel();
 
     // Create and register the control handler
@@ -76,25 +81,46 @@ pub fn run_service(_arguments: Vec<OsString>) -> Result<()> {
         .map_err(|e| crate::FFIError::Service(format!("Failed to set StartPending status: {}", e)))?;
     tracing::info!("Reported StartPending to SCM");
 
-    // Increment checkpoint to show progress during initialization
+    // Checkpoint 1: Load configuration
     status.checkpoint = 1;
     status_handle
         .set_service_status(status.clone())
         .map_err(|e| crate::FFIError::Service(format!("Failed to update checkpoint: {}", e)))?;
-    tracing::debug!("Initialization checkpoint 1");
+    tracing::debug!("Initialization checkpoint 1: loading configuration");
 
-    // Load configuration
     let config = ServiceConfig::load();
     tracing::info!("Loaded configuration: data_dir={:?}", config.data_dir);
 
+    // Ensure data directory exists
+    if let Err(e) = std::fs::create_dir_all(&config.data_dir) {
+        tracing::error!("Failed to create data directory: {}", e);
+        return Err(crate::FFIError::Io(e));
+    }
+
+    // Checkpoint 2: Initialize database
     status.checkpoint = 2;
     status_handle
         .set_service_status(status.clone())
         .map_err(|e| crate::FFIError::Service(format!("Failed to update checkpoint: {}", e)))?;
-    tracing::debug!("Initialization checkpoint 2");
+    tracing::debug!("Initialization checkpoint 2: opening database");
 
-    // TODO: Initialize database (Plan 01-02)
-    // TODO: Start indexer (Plan 01-03)
+    let db_path = config.data_dir.join("index.db");
+    let database = db::open_database(&db_path)?;
+    tracing::info!("Database opened: {:?}", db_path);
+
+    // Checkpoint 3: Start background indexer
+    status.checkpoint = 3;
+    status_handle
+        .set_service_status(status.clone())
+        .map_err(|e| crate::FFIError::Service(format!("Failed to update checkpoint: {}", e)))?;
+    tracing::debug!("Initialization checkpoint 3: starting background indexer");
+
+    // Create shutdown channel for indexer
+    let (indexer_shutdown_tx, indexer_shutdown_rx) = mpsc::channel();
+
+    // Start background indexer
+    let mut indexer_handle = indexer::start_background_indexer(database, indexer_shutdown_rx);
+    tracing::info!("Background indexer started");
 
     // Report Running - accept STOP and SHUTDOWN controls
     status.current_state = WinServiceState::Running;
@@ -120,7 +146,16 @@ pub fn run_service(_arguments: Vec<OsString>) -> Result<()> {
         .map_err(|e| crate::FFIError::Service(format!("Failed to set StopPending status: {}", e)))?;
     tracing::info!("Reported StopPending to SCM");
 
-    // TODO: Graceful shutdown - stop indexer, close database (Plans 01-02, 01-03)
+    // Signal indexer to stop
+    tracing::info!("Signaling indexer to stop...");
+    let _ = indexer_shutdown_tx.send(());
+
+    // Wait for indexer to finish (this joins the thread)
+    tracing::info!("Waiting for indexer to finish...");
+    indexer_handle.stop();
+    tracing::info!("Indexer stopped");
+
+    // Note: Database is closed when dropped (when run_service returns)
 
     // Report Stopped
     status.current_state = WinServiceState::Stopped;
