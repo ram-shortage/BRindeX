@@ -1,0 +1,30 @@
+// Search query grammar for FastFileIndex
+// Supports: wildcards (* ?), filters (ext: size: type: modified: path:)
+
+WHITESPACE = _{ " " | "\t" }
+
+query = { SOI ~ term* ~ EOI }
+term = { filter | word }
+
+filter = { filter_type ~ ":" ~ filter_value }
+filter_type = { "ext" | "size" | "type" | "modified" | "path" }
+filter_value = { quoted_string | comparison | path_value | word }
+
+comparison = { comparator ~ (size_value | date_value | word) }
+comparator = { ">=" | "<=" | ">" | "<" }
+size_value = { number ~ size_unit }
+size_unit = { ^"kb" | ^"mb" | ^"gb" | ^"tb" | ^"b" }
+date_value = { iso_date | relative_date }
+iso_date = @{ ASCII_DIGIT{4} ~ "-" ~ ASCII_DIGIT{2} ~ "-" ~ ASCII_DIGIT{2} }
+relative_date = { ^"today" | ^"yesterday" | ^"lastweek" | ^"lastmonth" | ^"lastyear" }
+
+// Windows path: starts with drive letter followed by : then path chars
+path_value = @{ ASCII_ALPHA ~ ":" ~ path_char* }
+path_char = { !(" " | "\t" | "\"") ~ ANY }
+
+word = @{ (wildcard | char)+ }
+wildcard = { "*" | "?" }
+char = { !(":" | " " | "\t" | "\"") ~ ANY }
+quoted_string = { "\"" ~ inner ~ "\"" }
+inner = @{ (!("\"") ~ ANY)* }
+number = @{ ASCII_DIGIT+ }
