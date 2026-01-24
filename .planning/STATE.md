@@ -5,34 +5,34 @@
 See: .planning/PROJECT.md (updated 2026-01-24)
 
 **Core value:** Instant file/folder name lookups that actually work — no flakiness, no waiting, no stale results.
-**Current focus:** Phase 2 - Real-time Updates (IN PROGRESS)
+**Current focus:** Phase 3 - Search Experience (NEXT)
 
 ## Current Position
 
 Phase: 2 of 3 (Real-time Updates)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-01-24 - Completed 02-01-PLAN.md
+Plan: 2 of 2 in current phase
+Status: Phase complete
+Last activity: 2026-01-24 - Completed 02-02-PLAN.md
 
-Progress: [█████░░░░░] 50%
+Progress: [███████░░░] 62.5%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 5.5 min
-- Total execution time: 0.37 hours
+- Total plans completed: 5
+- Average duration: 5.2 min
+- Total execution time: 0.44 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1. Foundation | 3/3 | 16 min | 5 min |
-| 2. Real-time Updates | 1/2 | 6 min | 6 min |
+| 2. Real-time Updates | 2/2 | 10 min | 5 min |
 | 3. Search Experience | 0/3 | - | - |
 
 **Recent Trend:**
-- Last 5 plans: 5 min, 3 min, 8 min, 6 min
+- Last 5 plans: 3 min, 8 min, 6 min, 4 min
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -54,6 +54,9 @@ Recent decisions affecting current work:
 - usn-journal-rs 0.4 for USN monitoring (compatible with windows 0.62)
 - 30-second USN polling interval, 4x throttle when CPU > 80%
 - Volumes must be explicitly enabled in config (no surprise indexing)
+- VolumeState enum stored as TEXT in database for readability
+- 100ms debounce for mount events (boot-time flood prevention)
+- 7-day offline volume retention with daily cleanup
 
 ### Pending Todos
 
@@ -62,10 +65,10 @@ None yet.
 ### Blockers/Concerns
 
 - MFT scanning requires administrator privileges to access $MFT directly
-- USN Journal monitoring not yet wired into service lifecycle
+- Service integration of USN monitors and FAT reconciler needs wiring in run_service
 
 ## Session Continuity
 
-Last session: 2026-01-24T14:31:54Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-01-24T14:39:35Z
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None
