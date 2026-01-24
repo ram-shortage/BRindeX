@@ -1,0 +1,18 @@
+[package]
+name = "ffi"
+version = "0.1.0"
+edition = "2021"
+description = "FastFileIndex - Instant file/folder name lookups"
+
+[[bin]]
+name = "ffi-service"
+path = "src/bin/ffi-service.rs"
+
+[dependencies]
+windows-service = "0.7"
+tokio = { version = "1.43", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+thiserror = "2.0"
+anyhow = "1.0"
