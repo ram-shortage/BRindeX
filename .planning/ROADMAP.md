@@ -12,7 +12,7 @@ FFI delivers instant file/folder name lookups via three phases: build the index 
 
 - [x] **Phase 1: Foundation** - Windows service with persistent file index
 - [x] **Phase 2: Real-time Updates** - NTFS USN Journal and FAT volume monitoring
-- [ ] **Phase 3: Search Experience** - Global hotkey popup with filters and actions
+- [x] **Phase 3: Search Experience** - Global hotkey popup with filters and actions
 
 ## Phase Details
 
@@ -62,9 +62,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 03-01: IPC layer (named pipes) for client-service communication
-- [ ] 03-02: Search UI with global hotkey and keyboard navigation
-- [ ] 03-03: Search syntax parser and filter implementation
+- [x] 03-01-PLAN.md - IPC layer (named pipes) for client-service communication
+- [x] 03-02-PLAN.md - Search UI with global hotkey and keyboard navigation
+- [x] 03-03-PLAN.md - Search syntax parser and filter implementation
 
 ## Progress
 
@@ -75,7 +75,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 (insert decimal phases as needed)
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete | 2026-01-24 |
 | 2. Real-time Updates | 2/2 | Complete | 2026-01-24 |
-| 3. Search Experience | 0/3 | Not started | - |
+| 3. Search Experience | 3/3 | Complete | 2026-01-24 |
 
 ---
 *Roadmap created: 2026-01-24*
