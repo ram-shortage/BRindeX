@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-24)
 ## Current Position
 
 Phase: 3 of 3 (Search Experience)
-Plan: 1 of 3 in current phase
+Plan: 3 of 3 in current phase
 Status: In progress
-Last activity: 2026-01-24 - Completed 03-01-PLAN.md
+Last activity: 2026-01-24 - Completed 03-03-PLAN.md
 
-Progress: [████████░░] 75%
+Progress: [█████████░] 87.5%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
+- Total plans completed: 8
 - Average duration: 5.0 min
-- Total execution time: 0.50 hours
+- Total execution time: 0.67 hours
 
 **By Phase:**
 
@@ -29,10 +29,10 @@ Progress: [████████░░] 75%
 |-------|-------|-------|----------|
 | 1. Foundation | 3/3 | 16 min | 5 min |
 | 2. Real-time Updates | 2/2 | 10 min | 5 min |
-| 3. Search Experience | 1/3 | 4 min | 4 min |
+| 3. Search Experience | 3/3 | 14 min | 5 min |
 
 **Recent Trend:**
-- Last 5 plans: 8 min, 6 min, 4 min, 4 min
+- Last 5 plans: 6 min, 4 min, 4 min, 5 min, 5 min
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -60,6 +60,9 @@ Recent decisions affecting current work:
 - Length-prefixed JSON for IPC (4-byte LE prefix + JSON payload)
 - Stateless IPC client (connects per request for simplicity)
 - Named pipe loop pattern with spawn for server
+- pest grammar for search syntax (maintainable DSL parsing)
+- Windows path special handling (path_value rule for C:\)
+- Path scope deferred to post-filter (SQL would need schema change)
 
 ### Pending Todos
 
@@ -69,9 +72,10 @@ None yet.
 
 - MFT scanning requires administrator privileges to access $MFT directly
 - Service integration of USN monitors, FAT reconciler, and IPC server needs wiring in run_service
+- Path scope filtering requires path reconstruction - needs post-filter or schema change
 
 ## Session Continuity
 
-Last session: 2026-01-24T16:39:23Z
-Stopped at: Completed 03-01-PLAN.md
+Last session: 2026-01-24T16:40:23Z
+Stopped at: Completed 03-03-PLAN.md
 Resume file: None
