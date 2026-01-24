@@ -111,14 +111,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SERV-01 | Phase 1 | Pending |
-| SERV-02 | Phase 1 | Pending |
-| SERV-03 | Phase 1 | Pending |
-| INDX-01 | Phase 1 | Pending |
-| INDX-02 | Phase 1 | Pending |
-| INDX-03 | Phase 1 | Pending |
-| INDX-04 | Phase 1 | Pending |
-| INDX-05 | Phase 1 | Pending |
+| SERV-01 | Phase 1 | Complete |
+| SERV-02 | Phase 1 | Complete |
+| SERV-03 | Phase 1 | Complete |
+| INDX-01 | Phase 1 | Complete |
+| INDX-02 | Phase 1 | Complete |
+| INDX-03 | Phase 1 | Complete |
+| INDX-04 | Phase 1 | Complete |
+| INDX-05 | Phase 1 | Complete |
 | UPDT-01 | Phase 2 | Pending |
 | UPDT-02 | Phase 2 | Pending |
 | UPDT-03 | Phase 2 | Pending |
