@@ -5,7 +5,7 @@
 
 pub mod service;
 pub mod db;
-// pub mod indexer; // Coming in Plan 01-03
+pub mod indexer;
 
 use thiserror::Error;
 
