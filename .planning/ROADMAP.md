@@ -46,8 +46,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: NTFS USN Journal monitoring with wrap detection
-- [ ] 02-02: FAT/exFAT directory watchers with periodic reconciliation
+- [ ] 02-01: USN Journal monitoring with wrap detection, configuration, and adaptive throttling
+- [ ] 02-02: FAT periodic reconciliation and volume mount/unmount lifecycle management
 
 ### Phase 3: Search Experience
 **Goal**: User can instantly search and act on files via global hotkey popup
