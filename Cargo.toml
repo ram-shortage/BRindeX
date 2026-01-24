@@ -20,9 +20,20 @@ rusqlite = { version = "0.38", features = ["bundled"] }
 mft = "0.7"
 walkdir = "2"
 
+# Phase 2: Real-time updates
+toml = "0.8"
+serde = { version = "1.0", features = ["derive"] }
+sysinfo = "0.33"
+directories = "5.0"
+
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [
     "Win32_Storage_FileSystem",
     "Win32_System_Ioctl",
     "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_SystemInformation",
 ] }
+
+# USN Journal support - Windows only
+usn-journal-rs = "0.4"

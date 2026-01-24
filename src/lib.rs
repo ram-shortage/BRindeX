@@ -24,6 +24,10 @@ pub enum FFIError {
     #[error("Indexer error: {0}")]
     Indexer(String),
 
+    /// Configuration errors (TOML parsing, file access)
+    #[error("Config error: {0}")]
+    Config(String),
+
     /// I/O errors (file/network operations)
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
