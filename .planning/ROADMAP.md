@@ -29,7 +29,7 @@ FFI delivers instant file/folder name lookups via three phases: build the index 
 **Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: Windows service scaffolding with lifecycle management
+- [x] 01-01: Windows service scaffolding with lifecycle management
 - [ ] 01-02: SQLite database layer with WAL mode and optimized schema
 - [ ] 01-03: MFT reader for NTFS + directory enumeration for FAT initial indexing
 
@@ -73,7 +73,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 (insert decimal phases as needed)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/3 | Planned | - |
+| 1. Foundation | 1/3 | In progress | - |
 | 2. Real-time Updates | 0/2 | Not started | - |
 | 3. Search Experience | 0/3 | Not started | - |
 
