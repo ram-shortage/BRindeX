@@ -9,4 +9,4 @@ pub mod query;
 
 pub use filters::*;
 pub use parser::{parse_query, ParsedQuery};
-pub use query::build_sql_query;
+pub use query::{build_sql_query, build_sql_query_with_limit, SqlParam};
