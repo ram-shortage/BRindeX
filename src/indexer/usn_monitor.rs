@@ -451,6 +451,284 @@ pub fn apply_changes_batch(
     Ok(applied)
 }
 
+/// Adaptive throttling based on system CPU load.
+///
+/// Reduces polling frequency when the system is under heavy load
+/// to avoid impacting user work.
+pub struct AdaptiveThrottle {
+    system: sysinfo::System,
+    normal_interval: std::time::Duration,
+    throttled_interval: std::time::Duration,
+    cpu_threshold: f32,
+}
+
+impl AdaptiveThrottle {
+    /// Create a new adaptive throttle with the specified normal interval.
+    ///
+    /// When CPU usage exceeds 80%, polling interval increases 4x.
+    pub fn new(normal_secs: u64) -> Self {
+        Self {
+            system: sysinfo::System::new(),
+            normal_interval: std::time::Duration::from_secs(normal_secs),
+            throttled_interval: std::time::Duration::from_secs(normal_secs * 4),
+            cpu_threshold: 80.0,
+        }
+    }
+
+    /// Get the current polling interval based on CPU load.
+    ///
+    /// Returns throttled interval if CPU > 80%, otherwise normal interval.
+    pub fn get_interval(&mut self) -> std::time::Duration {
+        use sysinfo::CpuRefreshKind;
+
+        // Refresh CPU info - use nothing() and add CPU usage
+        let cpu_kind = CpuRefreshKind::nothing().with_cpu_usage();
+        self.system.refresh_cpu_specifics(cpu_kind);
+
+        // Need two samples for accurate CPU reading
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        self.system.refresh_cpu_specifics(cpu_kind);
+
+        let cpu_usage = self.system.global_cpu_usage();
+
+        if cpu_usage > self.cpu_threshold {
+            tracing::debug!("CPU at {:.1}%, throttling USN polling", cpu_usage);
+            self.throttled_interval
+        } else {
+            self.normal_interval
+        }
+    }
+}
+
+/// Monitor handle for managing USN monitor lifecycle.
+pub struct UsnMonitorHandle {
+    /// Thread handle for joining
+    handle: Option<std::thread::JoinHandle<()>>,
+}
+
+impl UsnMonitorHandle {
+    /// Signal the monitor to stop and wait for it to finish.
+    pub fn stop(&mut self) {
+        if let Some(handle) = self.handle.take() {
+            match handle.join() {
+                Ok(()) => tracing::info!("USN monitor thread stopped gracefully"),
+                Err(_) => tracing::error!("USN monitor thread panicked"),
+            }
+        }
+    }
+}
+
+/// Start the USN monitor loop for a volume.
+///
+/// This function spawns a background thread that:
+/// 1. Polls the USN journal at configurable intervals
+/// 2. Deduplicates rapid changes
+/// 3. Applies batched updates to the database
+/// 4. Handles journal wrap by triggering background rescan
+/// 5. Adapts polling frequency based on CPU load
+///
+/// # Arguments
+/// * `drive_letter` - The volume to monitor (e.g., 'C')
+/// * `db` - Database instance for persisting changes
+/// * `poll_interval_secs` - Normal polling interval in seconds
+/// * `shutdown_rx` - Channel receiver for shutdown signals
+/// * `resume_usn` - Optional (last_usn, journal_id) tuple for resuming from saved state
+///
+/// # Returns
+/// A handle that can be used to stop the monitor.
+#[cfg(windows)]
+pub fn usn_monitor_loop(
+    drive_letter: char,
+    mut db: Database,
+    poll_interval_secs: u64,
+    shutdown_rx: std::sync::mpsc::Receiver<()>,
+    resume_usn: Option<(i64, u64)>,
+) -> UsnMonitorHandle {
+    use std::time::Instant;
+    use crate::db::{get_volume_usn, update_volume_usn, get_volume};
+
+    let handle = std::thread::spawn(move || {
+        tracing::info!("Starting USN monitor for volume {}: ", drive_letter);
+
+        // Create or resume monitor
+        let monitor_result = if let Some((last_usn, journal_id)) = resume_usn {
+            tracing::info!(
+                "Resuming USN monitor from usn={}, journal_id={}",
+                last_usn,
+                journal_id
+            );
+            UsnMonitor::resume(drive_letter, last_usn, journal_id)
+        } else {
+            UsnMonitor::new(drive_letter)
+        };
+
+        let mut monitor = match monitor_result {
+            Ok(m) => m,
+            Err(UsnError::JournalNotActive) => {
+                tracing::info!(
+                    "USN Journal not active on volume {}: - treating as FAT volume",
+                    drive_letter
+                );
+                return;
+            }
+            Err(UsnError::JournalWrapped { last_processed, lowest_valid }) => {
+                tracing::warn!(
+                    "USN Journal wrapped on volume {}: (last={}, lowest={}). Triggering rescan.",
+                    drive_letter,
+                    last_processed,
+                    lowest_valid
+                );
+                trigger_background_rescan(drive_letter);
+                return;
+            }
+            Err(UsnError::JournalRecreated { old_id, new_id }) => {
+                tracing::warn!(
+                    "USN Journal recreated on volume {}: (old={}, new={}). Triggering rescan.",
+                    drive_letter,
+                    old_id,
+                    new_id
+                );
+                trigger_background_rescan(drive_letter);
+                return;
+            }
+            Err(e) => {
+                tracing::error!("Failed to create USN monitor for {}: {}", drive_letter, e);
+                return;
+            }
+        };
+
+        // Get volume ID from database for updates
+        let volume_id = {
+            let drive_str = format!("{}:", drive_letter);
+            match get_volume(db.conn(), &drive_str) {
+                Ok(Some(vol)) => vol.id,
+                Ok(None) => {
+                    tracing::error!("Volume {} not found in database", drive_letter);
+                    return;
+                }
+                Err(e) => {
+                    tracing::error!("Failed to get volume {}: {}", drive_letter, e);
+                    return;
+                }
+            }
+        };
+
+        let mut throttle = AdaptiveThrottle::new(poll_interval_secs);
+
+        loop {
+            // Check for shutdown signal
+            match shutdown_rx.try_recv() {
+                Ok(_) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    tracing::info!("USN monitor for {} received shutdown signal", drive_letter);
+                    break;
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            }
+
+            let start = Instant::now();
+
+            // Poll for changes
+            match monitor.poll_changes() {
+                Ok(changes) if !changes.is_empty() => {
+                    let deduped = deduplicate_changes(changes);
+                    tracing::info!(
+                        "Volume {}: processing {} changes ({} after dedup)",
+                        drive_letter,
+                        deduped.len(),
+                        deduped.len()
+                    );
+
+                    match apply_changes_batch(&mut db, volume_id, &deduped) {
+                        Ok(applied) => {
+                            tracing::debug!("Applied {} changes to volume {}", applied, drive_letter);
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to apply changes: {}", e);
+                        }
+                    }
+
+                    // Update persisted USN position
+                    if let Err(e) = update_volume_usn(
+                        db.conn(),
+                        volume_id,
+                        monitor.last_usn(),
+                        monitor.journal_id() as i64,
+                    ) {
+                        tracing::error!("Failed to persist USN position: {}", e);
+                    }
+                }
+                Ok(_) => {
+                    // No changes this poll cycle
+                }
+                Err(UsnError::JournalWrapped { last_processed, lowest_valid }) => {
+                    tracing::warn!(
+                        "USN Journal wrapped on volume {} (last={}, lowest={}). Triggering rescan.",
+                        drive_letter,
+                        last_processed,
+                        lowest_valid
+                    );
+                    trigger_background_rescan(drive_letter);
+                    break;
+                }
+                Err(UsnError::JournalRecreated { old_id, new_id }) => {
+                    tracing::warn!(
+                        "USN Journal recreated on volume {} (old={}, new={}). Triggering rescan.",
+                        drive_letter,
+                        old_id,
+                        new_id
+                    );
+                    trigger_background_rescan(drive_letter);
+                    break;
+                }
+                Err(e) => {
+                    tracing::error!("Error polling USN journal for {}: {}", drive_letter, e);
+                }
+            }
+
+            // Get adaptive interval based on CPU load
+            let interval = throttle.get_interval();
+
+            // Sleep for remainder of interval
+            let elapsed = start.elapsed();
+            if elapsed < interval {
+                std::thread::sleep(interval - elapsed);
+            }
+        }
+
+        tracing::info!("USN monitor for {} exiting", drive_letter);
+    });
+
+    UsnMonitorHandle {
+        handle: Some(handle),
+    }
+}
+
+/// Stub for non-Windows platforms.
+#[cfg(not(windows))]
+pub fn usn_monitor_loop(
+    _drive_letter: char,
+    _db: Database,
+    _poll_interval_secs: u64,
+    _shutdown_rx: std::sync::mpsc::Receiver<()>,
+    _resume_usn: Option<(i64, u64)>,
+) -> UsnMonitorHandle {
+    tracing::warn!("USN monitoring not available on non-Windows platforms");
+    UsnMonitorHandle { handle: None }
+}
+
+/// Trigger a background rescan of a volume.
+///
+/// Called when the USN journal has wrapped or been recreated,
+/// meaning some file changes were missed.
+pub fn trigger_background_rescan(drive_letter: char) {
+    // TODO: Implement full background rescan integration with indexer
+    // For now, just log the event
+    tracing::warn!(
+        "Background rescan triggered for volume {}: - full rescan needed",
+        drive_letter
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
