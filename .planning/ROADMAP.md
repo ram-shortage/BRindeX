@@ -11,7 +11,7 @@ FFI delivers instant file/folder name lookups via three phases: build the index 
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
 - [x] **Phase 1: Foundation** - Windows service with persistent file index
-- [ ] **Phase 2: Real-time Updates** - NTFS USN Journal and FAT volume monitoring
+- [x] **Phase 2: Real-time Updates** - NTFS USN Journal and FAT volume monitoring
 - [ ] **Phase 3: Search Experience** - Global hotkey popup with filters and actions
 
 ## Phase Details
@@ -46,8 +46,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: USN Journal monitoring with wrap detection, configuration, and adaptive throttling
-- [ ] 02-02: FAT periodic reconciliation and volume mount/unmount lifecycle management
+- [x] 02-01: USN Journal monitoring with wrap detection, configuration, and adaptive throttling
+- [x] 02-02: FAT periodic reconciliation and volume mount/unmount lifecycle management
 
 ### Phase 3: Search Experience
 **Goal**: User can instantly search and act on files via global hotkey popup
@@ -74,7 +74,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 (insert decimal phases as needed)
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete | 2026-01-24 |
-| 2. Real-time Updates | 0/2 | Not started | - |
+| 2. Real-time Updates | 2/2 | Complete | 2026-01-24 |
 | 3. Search Experience | 0/3 | Not started | - |
 
 ---
