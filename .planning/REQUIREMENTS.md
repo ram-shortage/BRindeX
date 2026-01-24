@@ -111,47 +111,47 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SERV-01 | TBD | Pending |
-| SERV-02 | TBD | Pending |
-| SERV-03 | TBD | Pending |
-| INDX-01 | TBD | Pending |
-| INDX-02 | TBD | Pending |
-| INDX-03 | TBD | Pending |
-| INDX-04 | TBD | Pending |
-| INDX-05 | TBD | Pending |
-| UPDT-01 | TBD | Pending |
-| UPDT-02 | TBD | Pending |
-| UPDT-03 | TBD | Pending |
-| UPDT-04 | TBD | Pending |
-| CONF-01 | TBD | Pending |
-| CONF-02 | TBD | Pending |
-| CONF-03 | TBD | Pending |
-| SRUI-01 | TBD | Pending |
-| SRUI-02 | TBD | Pending |
-| SRUI-03 | TBD | Pending |
-| SRUI-04 | TBD | Pending |
-| SRUI-05 | TBD | Pending |
-| DISP-01 | TBD | Pending |
-| DISP-02 | TBD | Pending |
-| DISP-03 | TBD | Pending |
-| DISP-04 | TBD | Pending |
-| DISP-05 | TBD | Pending |
-| ACTN-01 | TBD | Pending |
-| ACTN-02 | TBD | Pending |
-| ACTN-03 | TBD | Pending |
-| SYNT-01 | TBD | Pending |
-| SYNT-02 | TBD | Pending |
-| SYNT-03 | TBD | Pending |
-| SYNT-04 | TBD | Pending |
-| SYNT-05 | TBD | Pending |
-| SYNT-06 | TBD | Pending |
-| SYNT-07 | TBD | Pending |
+| SERV-01 | Phase 1 | Pending |
+| SERV-02 | Phase 1 | Pending |
+| SERV-03 | Phase 1 | Pending |
+| INDX-01 | Phase 1 | Pending |
+| INDX-02 | Phase 1 | Pending |
+| INDX-03 | Phase 1 | Pending |
+| INDX-04 | Phase 1 | Pending |
+| INDX-05 | Phase 1 | Pending |
+| UPDT-01 | Phase 2 | Pending |
+| UPDT-02 | Phase 2 | Pending |
+| UPDT-03 | Phase 2 | Pending |
+| UPDT-04 | Phase 2 | Pending |
+| CONF-01 | Phase 2 | Pending |
+| CONF-02 | Phase 2 | Pending |
+| CONF-03 | Phase 2 | Pending |
+| SRUI-01 | Phase 3 | Pending |
+| SRUI-02 | Phase 3 | Pending |
+| SRUI-03 | Phase 3 | Pending |
+| SRUI-04 | Phase 3 | Pending |
+| SRUI-05 | Phase 3 | Pending |
+| DISP-01 | Phase 3 | Pending |
+| DISP-02 | Phase 3 | Pending |
+| DISP-03 | Phase 3 | Pending |
+| DISP-04 | Phase 3 | Pending |
+| DISP-05 | Phase 3 | Pending |
+| ACTN-01 | Phase 3 | Pending |
+| ACTN-02 | Phase 3 | Pending |
+| ACTN-03 | Phase 3 | Pending |
+| SYNT-01 | Phase 3 | Pending |
+| SYNT-02 | Phase 3 | Pending |
+| SYNT-03 | Phase 3 | Pending |
+| SYNT-04 | Phase 3 | Pending |
+| SYNT-05 | Phase 3 | Pending |
+| SYNT-06 | Phase 3 | Pending |
+| SYNT-07 | Phase 3 | Pending |
 
 **Coverage:**
 - v1 requirements: 32 total
-- Mapped to phases: 0
-- Unmapped: 32 (pending roadmap creation)
+- Mapped to phases: 32
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-01-24*
-*Last updated: 2026-01-24 after initial definition*
+*Last updated: 2026-01-24 after roadmap creation*
