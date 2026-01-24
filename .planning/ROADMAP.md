@@ -73,7 +73,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 (insert decimal phases as needed)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/3 | Not started | - |
+| 1. Foundation | 0/3 | Planned | - |
 | 2. Real-time Updates | 0/2 | Not started | - |
 | 3. Search Experience | 0/3 | Not started | - |
 
