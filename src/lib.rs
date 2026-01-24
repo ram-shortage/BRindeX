@@ -6,6 +6,8 @@
 pub mod service;
 pub mod db;
 pub mod indexer;
+pub mod ipc;
+pub mod search;
 
 use thiserror::Error;
 
@@ -82,6 +84,14 @@ pub enum FFIError {
     /// I/O errors (file/network operations)
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
+
+    /// IPC errors (named pipe communication)
+    #[error("IPC error: {0}")]
+    Ipc(String),
+
+    /// Search/parsing errors
+    #[error("Search error: {0}")]
+    Search(String),
 }
 
 /// Result type alias using FFIError
