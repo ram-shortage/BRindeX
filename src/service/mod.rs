@@ -5,12 +5,15 @@
 //! - State transitions (Starting -> Running -> Stopping -> Stopped)
 //! - Configuration loading
 //! - Database initialization and indexer management
+//! - Volume mount/unmount detection
 
 pub mod config;
 pub mod control;
+pub mod volume_watcher;
 
 pub use config::ServiceConfig;
 pub use control::ServiceState;
+pub use volume_watcher::{VolumeEvent, VolumeWatcherHandle, start_volume_watcher};
 
 #[cfg(windows)]
 pub use control::create_event_handler;

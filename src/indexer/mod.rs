@@ -244,3 +244,207 @@ pub fn start_usn_monitors(
 
     monitors
 }
+
+/// Handle a volume mount event.
+///
+/// This function:
+/// 1. Checks if volume is configured for indexing
+/// 2. Compares volume serial to detect volume swaps
+/// 3. Sets volume state to Online
+/// 4. Triggers appropriate indexing (NTFS USN monitor or FAT reconciliation)
+///
+/// # Arguments
+/// * `drive_letter` - The mounted drive letter
+/// * `config` - Service configuration
+/// * `db_path` - Path to the database
+///
+/// # Returns
+/// Ok if handled successfully, error otherwise.
+pub fn handle_volume_mount(
+    drive_letter: char,
+    config: &crate::service::config::Config,
+    db_path: &std::path::Path,
+) -> crate::Result<()> {
+    use crate::db::{open_database, get_volume, update_volume_state, get_volume_serial};
+    use crate::VolumeState;
+
+    // Check if volume is configured for indexing
+    if !config.is_volume_enabled(drive_letter) {
+        tracing::debug!("Volume {} mounted but not configured for indexing", drive_letter);
+        return Ok(());
+    }
+
+    tracing::info!("Handling mount event for configured volume {}", drive_letter);
+
+    // Get volume serial number
+    let serial = get_volume_serial(drive_letter);
+    let serial_str = serial.map(|s| format!("{:08X}", s)).unwrap_or_default();
+
+    // Open database
+    let db = open_database(db_path)?;
+
+    // Get existing volume record
+    let drive_str = format!("{}:", drive_letter);
+    let existing = get_volume(db.conn(), &drive_str)?;
+
+    if let Some(vol) = existing {
+        // Check if serial matches (same physical volume)
+        if vol.volume_serial != serial_str && !serial_str.is_empty() {
+            // Different volume at same drive letter!
+            tracing::warn!(
+                "Volume swap detected at {}: {} -> {}",
+                drive_letter,
+                vol.volume_serial,
+                serial_str
+            );
+
+            // Mark old data as offline
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
+            update_volume_state(db.conn(), vol.id, VolumeState::Offline { since: now })?;
+
+            tracing::info!("Old volume {} marked offline, fresh index needed", vol.volume_serial);
+
+            // Note: A fresh index will be triggered by the next indexing run
+            // The FAT reconciler or USN monitor setup will create a new volume record
+        } else {
+            // Same volume reconnected - set to Online and trigger reconciliation
+            tracing::info!("Volume {} reconnected (serial: {})", drive_letter, serial_str);
+            update_volume_state(db.conn(), vol.id, VolumeState::Online)?;
+
+            // Note: Quick reconciliation will happen on next FAT reconciler cycle
+            // or USN monitor will catch up from stored last_usn
+        }
+    } else {
+        tracing::info!("New volume {} detected (serial: {}), will be indexed", drive_letter, serial_str);
+        // New volume - will be picked up by indexer
+    }
+
+    Ok(())
+}
+
+/// Handle a volume unmount event.
+///
+/// Sets the volume state to Offline with current timestamp.
+/// The volume data is preserved for quick reconnection, and will be
+/// automatically cleaned up after the configured retention period.
+///
+/// # Arguments
+/// * `drive_letter` - The unmounted drive letter
+/// * `db_path` - Path to the database
+///
+/// # Returns
+/// Ok if handled successfully, error otherwise.
+pub fn handle_volume_unmount(
+    drive_letter: char,
+    db_path: &std::path::Path,
+) -> crate::Result<()> {
+    use crate::db::{open_database, get_volume, update_volume_state};
+    use crate::VolumeState;
+
+    tracing::info!("Handling unmount event for volume {}", drive_letter);
+
+    // Open database
+    let db = open_database(db_path)?;
+
+    // Get volume record
+    let drive_str = format!("{}:", drive_letter);
+    if let Some(vol) = get_volume(db.conn(), &drive_str)? {
+        // Set to offline with current timestamp
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        update_volume_state(db.conn(), vol.id, VolumeState::Offline { since: now })?;
+
+        tracing::info!(
+            "Volume {} marked offline, data preserved for 7 days",
+            drive_letter
+        );
+    } else {
+        tracing::debug!("Volume {} unmounted but not in database", drive_letter);
+    }
+
+    Ok(())
+}
+
+/// Start the volume event handler thread.
+///
+/// Spawns a thread that receives VolumeEvents and dispatches them
+/// to handle_volume_mount/handle_volume_unmount.
+///
+/// Debounces mount events with a 100ms window to handle boot-time floods.
+///
+/// # Arguments
+/// * `event_rx` - Receiver for volume events
+/// * `config` - Service configuration
+/// * `db_path` - Path to the database
+/// * `shutdown_rx` - Shutdown signal receiver
+///
+/// # Returns
+/// Thread handle for the event handler.
+pub fn start_volume_event_handler(
+    event_rx: std::sync::mpsc::Receiver<crate::service::VolumeEvent>,
+    config: crate::service::config::Config,
+    db_path: std::path::PathBuf,
+    shutdown_rx: std::sync::mpsc::Receiver<()>,
+) -> std::thread::JoinHandle<()> {
+    use crate::service::VolumeEvent;
+    use std::collections::HashMap;
+    use std::time::{Duration, Instant};
+
+    std::thread::spawn(move || {
+        const DEBOUNCE_WINDOW: Duration = Duration::from_millis(100);
+        let mut pending_mounts: HashMap<char, Instant> = HashMap::new();
+
+        loop {
+            // Check for shutdown
+            match shutdown_rx.try_recv() {
+                Ok(_) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    tracing::info!("Volume event handler shutting down");
+                    return;
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            }
+
+            // Process any ready debounced mounts
+            let now = Instant::now();
+            let ready: Vec<_> = pending_mounts
+                .iter()
+                .filter(|(_, &time)| now.duration_since(time) >= DEBOUNCE_WINDOW)
+                .map(|(&drive, _)| drive)
+                .collect();
+
+            for drive in ready {
+                pending_mounts.remove(&drive);
+                if let Err(e) = handle_volume_mount(drive, &config, &db_path) {
+                    tracing::error!("Failed to handle mount for {}: {}", drive, e);
+                }
+            }
+
+            // Receive events with timeout
+            match event_rx.recv_timeout(Duration::from_millis(50)) {
+                Ok(VolumeEvent::Mounted(drive)) => {
+                    // Add to pending with current time (debounce)
+                    pending_mounts.insert(drive, Instant::now());
+                }
+                Ok(VolumeEvent::Unmounted(drive)) => {
+                    // Remove from pending if was queued
+                    pending_mounts.remove(&drive);
+                    // Handle unmount immediately
+                    if let Err(e) = handle_volume_unmount(drive, &db_path) {
+                        tracing::error!("Failed to handle unmount for {}: {}", drive, e);
+                    }
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    tracing::info!("Volume event channel disconnected");
+                    return;
+                }
+            }
+        }
+    })
+}
