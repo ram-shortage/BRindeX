@@ -60,7 +60,6 @@ pub fn start_volume_watcher() -> (VolumeWatcherHandle, Sender<()>, Receiver<Volu
 /// Windows implementation of volume watcher loop.
 #[cfg(windows)]
 fn volume_watcher_loop(event_tx: Sender<VolumeEvent>, shutdown_rx: Receiver<()>) {
-    use std::ptr;
     use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::UI::WindowsAndMessaging::{
@@ -180,7 +179,7 @@ fn volume_watcher_loop(event_tx: Sender<VolumeEvent>, shutdown_rx: Receiver<()>)
 
     // Create hidden window
     let hwnd = unsafe {
-        CreateWindowExW(
+        match CreateWindowExW(
             WINDOW_EX_STYLE::default(),
             PCWSTR::from_raw(class_name.as_ptr()),
             PCWSTR::from_raw(to_wide("FFI Volume Watcher").as_ptr()),
@@ -188,13 +187,19 @@ fn volume_watcher_loop(event_tx: Sender<VolumeEvent>, shutdown_rx: Receiver<()>)
             0, 0, 0, 0, // x, y, width, height (doesn't matter for hidden window)
             None,
             None,
-            wc.hInstance,
+            Some(wc.hInstance),
             None,
-        )
+        ) {
+            Ok(h) => h,
+            Err(e) => {
+                tracing::error!("Failed to create volume watcher window: {}", e);
+                return;
+            }
+        }
     };
 
     if hwnd.is_invalid() {
-        tracing::error!("Failed to create volume watcher window");
+        tracing::error!("Volume watcher window handle is invalid");
         return;
     }
 

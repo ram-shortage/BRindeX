@@ -104,29 +104,28 @@ impl UsnMonitor {
     /// starting USN for future comparisons.
     pub fn new(drive_letter: char) -> std::result::Result<Self, UsnError> {
         use usn_journal_rs::volume::Volume;
-        use usn_journal_rs::UsnJournal;
+        use usn_journal_rs::journal::UsnJournal;
 
         let volume = Volume::from_drive_letter(drive_letter)
             .map_err(|e| UsnError::Other(format!("Failed to open volume: {}", e)))?;
 
-        let journal = UsnJournal::open(&volume)
+        let journal = UsnJournal::new(&volume);
+
+        let metadata = journal.query(false)
             .map_err(|e| {
                 // Check if journal is not active
                 let msg = format!("{}", e);
                 if msg.contains("not active") || msg.contains("1179") {
                     UsnError::JournalNotActive
                 } else {
-                    UsnError::Other(format!("Failed to open USN journal: {}", e))
+                    UsnError::Other(format!("Failed to query journal metadata: {}", e))
                 }
             })?;
-
-        let metadata = journal.query()
-            .map_err(|e| UsnError::Other(format!("Failed to query journal metadata: {}", e)))?;
 
         tracing::info!(
             "USN Monitor initialized for {}: - journal_id={}, first_usn={}, next_usn={}",
             drive_letter,
-            metadata.usn_journal_id,
+            metadata.journal_id,
             metadata.first_usn,
             metadata.next_usn
         );
@@ -134,7 +133,7 @@ impl UsnMonitor {
         Ok(Self {
             volume: drive_letter,
             last_usn: metadata.first_usn as i64,
-            journal_id: metadata.usn_journal_id,
+            journal_id: metadata.journal_id,
         })
     }
 
@@ -147,37 +146,36 @@ impl UsnMonitor {
         journal_id: u64,
     ) -> std::result::Result<Self, UsnError> {
         use usn_journal_rs::volume::Volume;
-        use usn_journal_rs::UsnJournal;
+        use usn_journal_rs::journal::UsnJournal;
 
         let volume = Volume::from_drive_letter(drive_letter)
             .map_err(|e| UsnError::Other(format!("Failed to open volume: {}", e)))?;
 
-        let journal = UsnJournal::open(&volume)
+        let journal = UsnJournal::new(&volume);
+
+        let metadata = journal.query(false)
             .map_err(|e| {
                 let msg = format!("{}", e);
                 if msg.contains("not active") || msg.contains("1179") {
                     UsnError::JournalNotActive
                 } else {
-                    UsnError::Other(format!("Failed to open USN journal: {}", e))
+                    UsnError::Other(format!("Failed to query journal metadata: {}", e))
                 }
             })?;
 
-        let metadata = journal.query()
-            .map_err(|e| UsnError::Other(format!("Failed to query journal metadata: {}", e)))?;
-
         // Check for journal recreation
-        if metadata.usn_journal_id != journal_id {
+        if metadata.journal_id != journal_id {
             return Err(UsnError::JournalRecreated {
                 old_id: journal_id,
-                new_id: metadata.usn_journal_id,
+                new_id: metadata.journal_id,
             });
         }
 
         // Check for journal wrap
-        if (last_usn as u64) < metadata.lowest_valid_usn {
+        if (last_usn as u64) < (metadata.lowest_valid_usn as u64) {
             return Err(UsnError::JournalWrapped {
                 last_processed: last_usn,
-                lowest_valid: metadata.lowest_valid_usn as i64,
+                lowest_valid: (metadata.lowest_valid_usn as u64) as i64,
             });
         }
 
@@ -200,58 +198,75 @@ impl UsnMonitor {
     /// Returns a list of changes or an error if the journal has wrapped/recreated.
     pub fn poll_changes(&mut self) -> std::result::Result<Vec<UsnChange>, UsnError> {
         use usn_journal_rs::volume::Volume;
-        use usn_journal_rs::UsnJournal;
+        use usn_journal_rs::journal::UsnJournal;
 
         let volume = Volume::from_drive_letter(self.volume)
             .map_err(|e| UsnError::Other(format!("Failed to open volume: {}", e)))?;
 
-        let journal = UsnJournal::open(&volume)
-            .map_err(|e| UsnError::Other(format!("Failed to open USN journal: {}", e)))?;
+        let journal = UsnJournal::new(&volume);
 
-        let metadata = journal.query()
+        let metadata = journal.query(false)
             .map_err(|e| UsnError::Other(format!("Failed to query journal metadata: {}", e)))?;
 
         // Check for journal recreation
-        if metadata.usn_journal_id != self.journal_id {
+        if metadata.journal_id != self.journal_id {
             return Err(UsnError::JournalRecreated {
                 old_id: self.journal_id,
-                new_id: metadata.usn_journal_id,
+                new_id: metadata.journal_id,
             });
         }
 
         // Check for journal wrap
-        if (self.last_usn as u64) < metadata.lowest_valid_usn {
+        if (self.last_usn as u64) < (metadata.lowest_valid_usn as u64) {
             return Err(UsnError::JournalWrapped {
                 last_processed: self.last_usn,
-                lowest_valid: metadata.lowest_valid_usn as i64,
+                lowest_valid: (metadata.lowest_valid_usn as u64) as i64,
             });
         }
 
         // Read changes from last_usn
         let mut changes = Vec::new();
 
-        // usn_journal_rs provides iteration over USN records
-        for result in journal.iter_from(self.last_usn as u64) {
-            match result {
-                Ok(record) => {
-                    // Update our position
-                    self.last_usn = record.usn as i64;
+        // usn_journal_rs 0.4 API: iter() returns Result<UsnJournalIter>
+        // UsnJournalIter implements Iterator<Item = UsnRecord>
+        let iter = journal.iter()
+            .map_err(|e| UsnError::Other(format!("Failed to iterate journal: {}", e)))?;
 
-                    // Convert USN reason flags to ChangeType
-                    let change_type = Self::reason_to_change_type(record.reason);
-
-                    changes.push(UsnChange {
-                        file_ref: record.file_reference_number as i64,
-                        parent_ref: record.parent_file_reference_number as i64,
-                        name: record.file_name.clone(),
-                        change_type,
-                        is_dir: record.is_directory,
-                    });
-                }
+        let starting_usn = self.last_usn;
+        for result in iter {
+            let record = match result {
+                Ok(r) => r,
                 Err(e) => {
                     tracing::warn!("Error reading USN record: {}", e);
+                    continue;
                 }
+            };
+
+            // Skip records older than our starting position
+            if record.usn <= starting_usn {
+                continue;
             }
+
+            // Update our position
+            self.last_usn = record.usn;
+
+            // Convert USN reason flags to ChangeType
+            let change_type = Self::reason_to_change_type(record.reason);
+
+            // Convert file_name from OsString to String
+            let name = record.file_name.to_string_lossy().into_owned();
+
+            // Note: usn_journal_rs 0.4 UsnEntry doesn't expose file_attrs
+            // We'll determine directory status during database lookup/update
+            let is_dir = false;
+
+            changes.push(UsnChange {
+                file_ref: record.fid as i64,
+                parent_ref: record.parent_fid as i64,
+                name,
+                change_type,
+                is_dir,
+            });
         }
 
         if !changes.is_empty() {

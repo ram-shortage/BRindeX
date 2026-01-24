@@ -10,8 +10,8 @@ use std::time::Instant;
 use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 use tokio::sync::broadcast;
 
-use crate::db::schema::Database;
-use crate::db::ops::{search_files, reconstruct_path};
+use crate::db::Database;
+use crate::db::{search_files, reconstruct_path};
 use crate::ipc::protocol::{
     read_message, write_message, FileResult, SearchRequest, SearchResponse, PIPE_NAME,
 };
@@ -115,7 +115,7 @@ async fn handle_client(mut pipe: NamedPipeServer, db: Arc<Mutex<Database>>) -> R
         })?;
 
         // Search files (this returns db::ops::FileEntry)
-        let entries = search_files(&conn.conn, &request.query, request.limit)?;
+        let entries = search_files(conn.conn(), &request.query, request.limit)?;
         let total = entries.len(); // TODO: Implement total count query for pagination
 
         (entries, total)
@@ -133,15 +133,15 @@ async fn handle_client(mut pipe: NamedPipeServer, db: Arc<Mutex<Database>>) -> R
             // Get volume info for drive letter
             let volume_letter = {
                 // Query volume drive letter - we need to look it up
-                let vol_result = conn.conn.query_row(
+                let vol_result = conn.conn().query_row(
                     "SELECT drive_letter FROM volumes WHERE id = ?1",
                     rusqlite::params![entry.volume_id],
-                    |row| row.get::<_, String>(0),
+                    |row: &rusqlite::Row| row.get::<_, String>(0),
                 );
                 vol_result.ok()
             };
 
-            let reconstructed = reconstruct_path(&conn.conn, entry.volume_id, file_ref)?;
+            let reconstructed = reconstruct_path(conn.conn(), entry.volume_id, file_ref)?;
 
             // Prepend drive letter if available
             if let Some(letter) = volume_letter {
