@@ -22,6 +22,8 @@ use crate::{FFIError, Result};
 /// - `last_usn`: Last processed USN (NTFS only)
 /// - `usn_journal_id`: USN Journal ID (NTFS only)
 /// - `last_scan_time`: Unix timestamp of last scan
+/// - `state`: Volume state ("online", "offline", "indexing", "rescanning", "disabled")
+/// - `offline_since`: Unix timestamp when volume went offline (nullable)
 ///
 /// ## files table
 /// - `id`: Primary key
@@ -47,7 +49,9 @@ pub fn init(conn: &Connection) -> Result<()> {
             fs_type TEXT NOT NULL,
             last_usn INTEGER,
             usn_journal_id INTEGER,
-            last_scan_time INTEGER
+            last_scan_time INTEGER,
+            state TEXT NOT NULL DEFAULT 'online',
+            offline_since INTEGER
         );
 
         CREATE TABLE IF NOT EXISTS files (

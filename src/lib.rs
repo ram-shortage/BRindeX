@@ -9,6 +9,57 @@ pub mod indexer;
 
 use thiserror::Error;
 
+/// Volume state for lifecycle management.
+///
+/// Tracks whether a volume is actively monitored, temporarily offline,
+/// undergoing indexing, or disabled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VolumeState {
+    /// Volume mounted and actively monitored.
+    Online,
+    /// Volume unmounted, data preserved. Contains timestamp when it went offline.
+    Offline { since: i64 },
+    /// Initial indexing in progress.
+    Indexing,
+    /// Background rescan in progress (after journal wrap or reconnect).
+    Rescanning,
+    /// Configured but not enabled for indexing.
+    Disabled,
+}
+
+impl VolumeState {
+    /// Parse from database string representation.
+    pub fn from_db(state_str: &str, offline_since: Option<i64>) -> Self {
+        match state_str {
+            "online" => VolumeState::Online,
+            "offline" => VolumeState::Offline { since: offline_since.unwrap_or(0) },
+            "indexing" => VolumeState::Indexing,
+            "rescanning" => VolumeState::Rescanning,
+            "disabled" => VolumeState::Disabled,
+            _ => VolumeState::Online, // Default fallback
+        }
+    }
+
+    /// Convert to database string representation.
+    pub fn to_db_str(&self) -> &'static str {
+        match self {
+            VolumeState::Online => "online",
+            VolumeState::Offline { .. } => "offline",
+            VolumeState::Indexing => "indexing",
+            VolumeState::Rescanning => "rescanning",
+            VolumeState::Disabled => "disabled",
+        }
+    }
+
+    /// Get the offline_since timestamp if state is Offline.
+    pub fn offline_since(&self) -> Option<i64> {
+        match self {
+            VolumeState::Offline { since } => Some(*since),
+            _ => None,
+        }
+    }
+}
+
 /// FFI error types covering all failure modes.
 #[derive(Error, Debug)]
 pub enum FFIError {

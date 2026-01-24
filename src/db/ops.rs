@@ -6,7 +6,7 @@
 use rusqlite::{params, Connection};
 use std::path::PathBuf;
 
-use crate::{FFIError, Result};
+use crate::{FFIError, Result, VolumeState};
 
 /// Batch size for bulk inserts - 100,000 records per transaction.
 /// This is optimal for SQLite per research benchmarks.
@@ -144,6 +144,185 @@ pub fn get_volume_usn(conn: &Connection, volume_id: i64) -> Result<Option<(i64, 
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
         Err(e) => Err(FFIError::Database(format!("Failed to get volume USN: {}", e))),
     }
+}
+
+/// Update the state of a volume.
+///
+/// # Arguments
+/// * `conn` - Database connection
+/// * `volume_id` - Volume database ID
+/// * `state` - New volume state
+pub fn update_volume_state(conn: &Connection, volume_id: i64, state: VolumeState) -> Result<()> {
+    let state_str = state.to_db_str();
+    let offline_since = state.offline_since();
+
+    conn.execute(
+        "UPDATE volumes SET state = ?1, offline_since = ?2 WHERE id = ?3",
+        params![state_str, offline_since, volume_id],
+    )
+    .map_err(|e| FFIError::Database(format!("Failed to update volume state: {}", e)))?;
+
+    Ok(())
+}
+
+/// Get the current state of a volume.
+///
+/// # Arguments
+/// * `conn` - Database connection
+/// * `volume_id` - Volume database ID
+///
+/// # Returns
+/// The volume state, or error if volume not found.
+pub fn get_volume_state(conn: &Connection, volume_id: i64) -> Result<VolumeState> {
+    let result = conn.query_row(
+        "SELECT state, offline_since FROM volumes WHERE id = ?1",
+        params![volume_id],
+        |row| {
+            let state_str: String = row.get(0)?;
+            let offline_since: Option<i64> = row.get(1)?;
+            Ok((state_str, offline_since))
+        },
+    );
+
+    match result {
+        Ok((state_str, offline_since)) => Ok(VolumeState::from_db(&state_str, offline_since)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => {
+            Err(FFIError::Database("Volume not found".to_string()))
+        }
+        Err(e) => Err(FFIError::Database(format!("Failed to get volume state: {}", e))),
+    }
+}
+
+/// Get volume information by serial number.
+///
+/// Used to detect if a different physical volume has been mounted at the same drive letter.
+///
+/// # Arguments
+/// * `conn` - Database connection
+/// * `serial` - Volume serial number (as string, e.g., "1234-ABCD")
+///
+/// # Returns
+/// Volume info if found, None otherwise.
+pub fn get_volume_by_serial(conn: &Connection, serial: &str) -> Result<Option<VolumeInfo>> {
+    let result = conn.query_row(
+        "SELECT id, drive_letter, volume_serial, fs_type FROM volumes WHERE volume_serial = ?1",
+        params![serial],
+        |row| {
+            Ok(VolumeInfo {
+                id: row.get(0)?,
+                drive_letter: row.get(1)?,
+                volume_serial: row.get(2)?,
+                fs_type: row.get(3)?,
+            })
+        },
+    );
+
+    match result {
+        Ok(volume) => Ok(Some(volume)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(FFIError::Database(format!("Failed to get volume by serial: {}", e))),
+    }
+}
+
+/// Clean up old offline volumes and their file data.
+///
+/// Deletes all files and volumes where the volume has been offline
+/// longer than the retention period.
+///
+/// # Arguments
+/// * `conn` - Database connection
+/// * `retention_days` - Number of days to retain offline volume data
+///
+/// # Returns
+/// The number of file entries deleted.
+pub fn cleanup_old_offline_volumes(conn: &Connection, retention_days: u32) -> Result<usize> {
+    // Calculate cutoff timestamp (now - retention_days in seconds)
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let cutoff = now - (retention_days as i64 * 86400);
+
+    // Delete files first (foreign key constraint)
+    let deleted = conn
+        .execute(
+            "DELETE FROM files WHERE volume_id IN (
+                SELECT id FROM volumes WHERE state = 'offline' AND offline_since < ?1
+            )",
+            params![cutoff],
+        )
+        .map_err(|e| FFIError::Database(format!("Failed to delete offline volume files: {}", e)))?;
+
+    // Then delete the volumes
+    conn.execute(
+        "DELETE FROM volumes WHERE state = 'offline' AND offline_since < ?1",
+        params![cutoff],
+    )
+    .map_err(|e| FFIError::Database(format!("Failed to delete offline volumes: {}", e)))?;
+
+    if deleted > 0 {
+        tracing::info!("Cleaned up {} files from old offline volumes (cutoff: {} days)", deleted, retention_days);
+    }
+
+    Ok(deleted)
+}
+
+/// Get the volume serial number from Windows volume information.
+///
+/// On Windows, uses GetVolumeInformationW to retrieve the serial number.
+/// On other platforms, returns None (volumes identified by other means).
+#[cfg(windows)]
+pub fn get_volume_serial(drive_letter: char) -> Option<u32> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    use windows::Win32::Storage::FileSystem::GetVolumeInformationW;
+    use windows::core::PCWSTR;
+
+    // Build root path like "C:\"
+    let root_path = format!("{}:\\", drive_letter);
+    let root_wide: Vec<u16> = OsStr::new(&root_path)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+
+    let mut serial_number: u32 = 0;
+
+    // Safety: We're passing valid pointers and the buffer is properly sized
+    let result = unsafe {
+        GetVolumeInformationW(
+            PCWSTR::from_raw(root_wide.as_ptr()),
+            None, // volume name buffer
+            None, // serial number
+            None, // max component length
+            None, // file system flags
+            None, // file system name buffer
+        )
+    };
+
+    // Try again with serial number pointer
+    let result = unsafe {
+        GetVolumeInformationW(
+            PCWSTR::from_raw(root_wide.as_ptr()),
+            None,
+            Some(&mut serial_number),
+            None,
+            None,
+            None,
+        )
+    };
+
+    if result.is_ok() {
+        Some(serial_number)
+    } else {
+        tracing::warn!("Failed to get volume serial for {}: {:?}", drive_letter, result);
+        None
+    }
+}
+
+/// Stub for non-Windows platforms.
+#[cfg(not(windows))]
+pub fn get_volume_serial(_drive_letter: char) -> Option<u32> {
+    None
 }
 
 /// Batch insert files with transactions for optimal performance.
