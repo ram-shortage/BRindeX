@@ -2,14 +2,17 @@
 //!
 //! This module coordinates volume detection and file scanning,
 //! dispatching to the appropriate scanner (MFT for NTFS, walkdir for FAT).
+//! Also provides USN Journal monitoring for real-time NTFS updates.
 
 mod volume;
 mod mft;
 mod fat;
+pub mod usn_monitor;
 
 pub use volume::*;
 pub use mft::*;
 pub use fat::*;
+pub use usn_monitor::{ChangeType, UsnChange, UsnError, UsnMonitor, deduplicate_changes, apply_changes_batch};
 
 use std::sync::mpsc::Receiver;
 use std::thread::{self, JoinHandle};

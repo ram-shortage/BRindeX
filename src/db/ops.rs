@@ -123,6 +123,29 @@ pub fn update_volume_usn(
     Ok(())
 }
 
+/// Get USN tracking information for a volume (for service resume).
+///
+/// Returns the last processed USN and journal ID if available.
+/// Returns None if the volume hasn't been indexed with USN tracking.
+pub fn get_volume_usn(conn: &Connection, volume_id: i64) -> Result<Option<(i64, u64)>> {
+    let result = conn.query_row(
+        "SELECT last_usn, usn_journal_id FROM volumes WHERE id = ?1",
+        params![volume_id],
+        |row| {
+            let last_usn: Option<i64> = row.get(0)?;
+            let journal_id: Option<i64> = row.get(1)?;
+            Ok((last_usn, journal_id))
+        },
+    );
+
+    match result {
+        Ok((Some(usn), Some(jid))) => Ok(Some((usn, jid as u64))),
+        Ok(_) => Ok(None), // USN data not set
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(FFIError::Database(format!("Failed to get volume USN: {}", e))),
+    }
+}
+
 /// Batch insert files with transactions for optimal performance.
 ///
 /// Uses BATCH_SIZE (100,000) records per transaction as recommended
