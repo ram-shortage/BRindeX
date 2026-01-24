@@ -8,6 +8,10 @@ description = "FastFileIndex - Instant file/folder name lookups"
 name = "ffi-service"
 path = "src/bin/ffi-service.rs"
 
+[[bin]]
+name = "ffi-search"
+path = "src/bin/ffi-search.rs"
+
 [dependencies]
 windows-service = "0.7"
 tokio = { version = "1.43", features = ["full"] }
@@ -34,6 +38,13 @@ pest = "2.8"
 pest_derive = "2.8"
 chrono = { version = "0.4", features = ["serde"] }
 
+# Phase 3: Search UI
+egui = "0.30"
+eframe = { version = "0.30", default-features = false, features = ["default_fonts", "glow", "persistence"] }
+egui_extras = "0.30"
+opener = { version = "0.8", features = ["reveal"] }
+arboard = "3.4"
+
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [
     "Win32_Storage_FileSystem",
@@ -45,3 +56,6 @@ windows = { version = "0.62", features = [
 
 # USN Journal support - Windows only
 usn-journal-rs = "0.4"
+
+# Global hotkey support - Windows only
+global-hotkey = "0.6"

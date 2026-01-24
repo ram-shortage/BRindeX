@@ -8,6 +8,7 @@ pub mod db;
 pub mod indexer;
 pub mod ipc;
 pub mod search;
+pub mod ui;
 
 use thiserror::Error;
 
