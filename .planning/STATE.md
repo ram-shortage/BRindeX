@@ -5,34 +5,34 @@
 See: .planning/PROJECT.md (updated 2026-01-24)
 
 **Core value:** Instant file/folder name lookups that actually work — no flakiness, no waiting, no stale results.
-**Current focus:** Phase 1 - Foundation (COMPLETE)
+**Current focus:** Phase 2 - Real-time Updates (IN PROGRESS)
 
 ## Current Position
 
-Phase: 1 of 3 (Foundation)
-Plan: 3 of 3 in current phase (COMPLETE)
-Status: Phase complete
-Last activity: 2026-01-24 - Completed 01-03-PLAN.md
+Phase: 2 of 3 (Real-time Updates)
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-01-24 - Completed 02-01-PLAN.md
 
-Progress: [████░░░░░░] 38%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: 5 min
-- Total execution time: 0.27 hours
+- Total plans completed: 4
+- Average duration: 5.5 min
+- Total execution time: 0.37 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1. Foundation | 3/3 | 16 min | 5 min |
-| 2. Real-time Updates | 0/2 | - | - |
+| 2. Real-time Updates | 1/2 | 6 min | 6 min |
 | 3. Search Experience | 0/3 | - | - |
 
 **Recent Trend:**
-- Last 5 plans: 5 min, 3 min, 8 min
+- Last 5 plans: 5 min, 3 min, 8 min, 6 min
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -51,6 +51,9 @@ Recent decisions affecting current work:
 - mft crate (0.7) for MFT parsing instead of usn-journal-rs (windows crate version conflicts)
 - Synthetic file references for FAT volumes (sequential counter since FAT has no MFT refs)
 - 100K batch size for database inserts
+- usn-journal-rs 0.4 for USN monitoring (compatible with windows 0.62)
+- 30-second USN polling interval, 4x throttle when CPU > 80%
+- Volumes must be explicitly enabled in config (no surprise indexing)
 
 ### Pending Todos
 
@@ -59,9 +62,10 @@ None yet.
 ### Blockers/Concerns
 
 - MFT scanning requires administrator privileges to access $MFT directly
+- USN Journal monitoring not yet wired into service lifecycle
 
 ## Session Continuity
 
-Last session: 2026-01-24T13:31:59Z
-Stopped at: Completed 01-03-PLAN.md (Phase 1 complete)
+Last session: 2026-01-24T14:31:54Z
+Stopped at: Completed 02-01-PLAN.md
 Resume file: None
